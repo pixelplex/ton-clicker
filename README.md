@@ -83,7 +83,7 @@ Main difference between vk and telegram is how you authorize your user.
 ### VK
 
 #### Backend
-Vk does not have any custom library to authorize. U need to manually calculate hash of `signParams` with secret key,
+Vk does not have any custom library to authorize. You need to manually calculate hash of `signParams` with secret key,
 provided in vk miniapp settings.
 
 ```ts

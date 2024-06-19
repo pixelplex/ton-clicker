@@ -76,13 +76,13 @@ The `vk-bridge` library is designed to interact with the VKontakte API. The offi
 
 The `@tma.js/sdk` library is designed to interact with the Telegram API. The official documentation can be found [here](https://docs.telegram-mini-apps.com/packages/tma-js-sdk).
 
-# App authorization
-
-## 3. VK
+## 3. App authorization
 
 Main difference between vk and telegram is how you authorize your user.
 
-### Backend
+### VK
+
+#### Backend
 Vk does not have any custom library to authorize. U need to manually calculate hash of `signParams` with secret key,
 provided in vk miniapp settings.
 
@@ -121,9 +121,9 @@ Use `vk-bridge` to get sign and sign params data.
   const { sign, ...signParams } = await bridge.send('VKWebAppGetLaunchParams');
 ```
 
-## 4. Telegram
+### Telegram
 
-### Backend
+#### Backend
 
 Telegram has similar mechanism. But instead of manual validation you can use package `@tma.js/init-data-node` to validate `initData`,
 using secret key, provided `@BotFather`.
@@ -154,7 +154,7 @@ const tgUserId = initData.user.id.toString();
 
 After this just place `tgUserId` in database or anywhere.
 
-### Frontend
+#### Frontend
 
 Use `@tma.js/sdk` to get `initDataRaw`.
 
@@ -164,12 +164,12 @@ Use `@tma.js/sdk` to get `initDataRaw`.
   const { initDataRaw } = retrieveLaunchParams();
 ```
 
-## 5. Auth with Ton wallet (optional)
+### Auth with Ton wallet (optional)
 
 Also, you can authorize your user using Ton Wallet.
 Standard way is using Ton Proof. Below is the example. More information you can find on [official docs](https://docs.ton.org/develop/dapps/ton-connect/sign).
 
-### Backend
+#### Backend
 
 ```ts
 export async function isProofValid(payload: TonProof): Promise<boolean> {

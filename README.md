@@ -1,48 +1,3 @@
-# Clicker frontend App
-
-The project is based on the Next.js framework. You can find more information about it on the official [Next.js website](https://nextjs.org/).
-
-## Development
-
-Clone the repository and install dependencies by running the following command:
-
-```bash
-yarn install
-```
-
-After installing the dependencies, you can start the development server with:
-
-```bash
-yarn dev
-```
-
-This command runs the app in development mode.
-
-Open [http://localhost:10888](http://localhost:10888) to view it in the browser.
-
-The page will automatically reload if you make changes to the code.
-
-### Additional Steps for Development
-
-After starting the app in development mode, you need to run the following command to create a tunnel:
-
-```bash
-yarn tunnel
-```
-
-Use the generated link for VK and Telegram mini apps.
-
-## Run in Production
-
-### Build and Run in Production Mode Manually
-
-You can build the bundle and run the application in production mode with the following commands:
-
-```bash
-yarn build:prod // creates bundle in the .next folder
-yarn start      // starts the app in production mode on port 3000
-```
-
 # Migrating MiniApps from VK to Telegram
 
 ## 1. Getting Started
@@ -113,7 +68,7 @@ const vkUserId = signParams.vk_user_id;
 
 After this just place `vkUserId` in database or anywhere. 
 
-### Frontend
+#### Frontend
 
 Use `vk-bridge` to get sign and sign params data.
 
@@ -249,3 +204,120 @@ export async function isProofValid(payload: TonProof): Promise<boolean> {
 }
 ```
 
+#### Frontend
+
+Example of creating a provider for auth:
+
+```ts
+import {
+  ReactNode, useCallback, useEffect, useRef, useState,
+} from 'react';
+import {
+  useIsConnectionRestored, useTonAddress, useTonConnectModal, useTonConnectUI, useTonWallet,
+} from '@tonconnect/ui-react';
+import { retrieveLaunchParams } from '@tma.js/sdk-react';
+import {
+  apiGetSelf, apiGetTonProof, apiLogout, apiPostTgAuthorize, apiPostTonProofAuth,
+} from 'services/auth.api';
+import { GetAuthSelfResponse, GetAuthTonProofResponse } from 'dtos/auth.dtos';
+import { AuthContext } from '../auth.context';
+
+type TAuthProvider = {
+  children: ReactNode
+};
+
+const payloadTTLMS = 1000 * 60 * 20;
+
+export const AuthTonProvider = ({ children }: TAuthProvider) => {
+  const [user, setUser] = useState<GetAuthSelfResponse | null>();
+  const isConnectionRestored = useIsConnectionRestored();
+  const wallet = useTonWallet();
+  const [tonConnectUI] = useTonConnectUI();
+  const address = useTonAddress();
+
+  const { open } = useTonConnectModal();
+  const interval = useRef<ReturnType<typeof setInterval> | undefined>();
+  const tonProof = useRef<GetAuthTonProofResponse | null>(null);
+
+  const fetchUser = useCallback(async () => {
+    const userResponse = await apiGetSelf();
+    setUser(userResponse);
+    const { initDataRaw } = retrieveLaunchParams();
+    if (!userResponse.tgUserId) {
+      await apiPostTgAuthorize(initDataRaw || '');
+    }
+  }, []);
+
+  const completeAuth = useCallback(async () => {
+    if (!isConnectionRestored) {
+      return;
+    }
+    clearInterval(interval.current);
+    if (!wallet) {
+      setUser(null);
+      const refreshPayload = async () => {
+        tonConnectUI.setConnectRequestParameters({ state: 'loading' });
+
+        const value = await apiGetTonProof();
+        tonProof.current = value;
+        if (!value) {
+          tonConnectUI.setConnectRequestParameters(null);
+        } else {
+          tonConnectUI.setConnectRequestParameters({ state: 'ready', value: { tonProof: value.payload } });
+        }
+
+      };
+      refreshPayload().catch(() => {});
+      setInterval(refreshPayload, payloadTTLMS);
+      return;
+    }
+
+    try {
+      await fetchUser();
+    } catch (err) {
+      if (wallet.connectItems?.tonProof && !('error' in wallet.connectItems.tonProof) && tonProof.current) {
+        try {
+          await apiPostTonProofAuth(
+            wallet.connectItems.tonProof.proof, wallet.account, tonProof.current,
+          );
+          await fetchUser();
+        } catch (e) {
+          alert('Please try another wallet');
+          await tonConnectUI.disconnect();
+        }
+      } else {
+        alert('Please try another wallet');
+        await tonConnectUI.disconnect();
+      }
+    }
+
+  }, [fetchUser, isConnectionRestored, tonConnectUI, wallet]);
+
+  useEffect(() => {
+    completeAuth();
+  }, [completeAuth]);
+
+  const onLogout = useCallback(async () => {
+    await tonConnectUI.disconnect();
+    await apiLogout();
+    setUser(null);
+  }, [tonConnectUI]);
+
+  const authContextValue = {
+    user,
+    setUser,
+    onLogout,
+    isWalletConnectionRestored: isConnectionRestored,
+    address,
+    onOpenTonModal: open,
+    tonConnectUI,
+    fetchUser,
+  };
+
+  return (
+    <AuthContext.Provider value={authContextValue}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+```
